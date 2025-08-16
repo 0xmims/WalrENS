@@ -5,6 +5,7 @@ node_compat = true
 
 [vars]
 WALRUS_BASE = "https://walrus.example/api"
+ETH_RPC_URL = "https://mainnet.example.rpc" # set in local env or via wrangler secret
 
 [observability]
 enabled = true
