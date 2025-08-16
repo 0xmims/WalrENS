@@ -1,14 +1,20 @@
+import { createPublicClient, http } from 'viem';
+import { mainnet } from 'viem/chains';
+import { getEnsText } from 'viem/ens';
+
 export type WalrusMapping =
 	| { type: 'blob'; id: string }
 	| { type: 'site'; id: string; index?: string };
 
 export interface ResolveOptions {
 	provider?: any;
+    network?: 'mainnet' | 'sepolia';
 }
 
 export interface PublishOptions {
 	network?: string;
 	textOnly?: boolean;
+    privateKey?: string;
 }
 
 export function getGatewayUrl(name: string, path: string = '/'): string {
@@ -16,9 +22,38 @@ export function getGatewayUrl(name: string, path: string = '/'): string {
 	return `https://${name}.walrus.tools${safePath}`;
 }
 
-export async function resolveWalrusFromEns(name: string, _opts: ResolveOptions = {}): Promise<WalrusMapping | null> {
-	// TODO: implement ENS lookup via viem. Placeholder returns null.
-	return null;
+export async function resolveWalrusFromEns(name: string, opts: ResolveOptions = {}): Promise<WalrusMapping | null> {
+	try {
+		// Check if provider (RPC URL) is provided
+		if (!opts.provider || typeof opts.provider !== 'string') {
+			console.error('RPC provider URL is required to resolve ENS names.');
+			return null;
+		}
+
+		// Create a public viem client for Ethereum mainnet
+		const client = createPublicClient({
+			chain: mainnet, // This can be updated later to support testnets
+			transport: http(opts.provider),
+		});
+
+		// Look up the 'walrus' text record for the provided ENS name
+		const textRecord = await getEnsText(client, {
+			name,
+			key: 'walrus',
+		});
+
+		// If the result is a non-empty string, parse it using WalrusTextSchema.parse()
+		if (textRecord && textRecord.trim() !== '') {
+			return WalrusTextSchema.parse(textRecord);
+		}
+
+		// Return null if the text record is not found or is empty
+		return null;
+	} catch (error) {
+		// Handle any potential errors gracefully
+		console.error('Error resolving Walrus from ENS:', error);
+		return null;
+	}
 }
 
 export async function publishToEns(
@@ -26,8 +61,10 @@ export async function publishToEns(
 	payload: Blob | Uint8Array | ArrayBuffer | string,
 	_opts: PublishOptions = {}
 ): Promise<{ txHash: string }> {
-	// TODO: implement upload + ENS text record write.
-	return { txHash: '0x' };
+	// This is the placeholder we are reverting to.
+	// The next prompt will replace this with the real, working code.
+	console.log('publishToEns is not yet fully implemented.');
+	throw new Error('publishToEns is not yet fully implemented.');
 }
 
 export const WalrusTextSchema = {

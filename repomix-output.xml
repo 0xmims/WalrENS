@@ -61,6 +61,7 @@ packages/cli/src/index.ts
 packages/cli/tsconfig.json
 packages/sdk/package.json
 packages/sdk/README.md
+packages/sdk/src/ens.ts
 packages/sdk/src/index.ts
 packages/sdk/tsconfig.json
 pnpm-workspace.yaml
@@ -70,6 +71,145 @@ tsconfig.base.json
 
 <files>
 This section contains the contents of the repository's files.
+
+<file path="packages/sdk/src/ens.ts">
+import { createPublicClient, http, createWalletClient as createViemWalletClient, parseEther } from 'viem';
+import { getEnsText, getEnsResolver } from 'viem/ens';
+import { mainnet } from 'viem/chains';
+import { privateKeyToAccount } from 'viem/accounts';
+import type { WalrusMapping } from './index.js';
+
+// Create viem client for ENS operations
+function createViemClient(rpcUrl: string) {
+	return createPublicClient({
+		chain: mainnet,
+		transport: http(rpcUrl),
+	});
+}
+
+// Create wallet client for transactions
+function createWalletClient(rpcUrl: string, privateKey: `0x${string}`) {
+	const account = privateKeyToAccount(privateKey);
+	return createViemWalletClient({
+		account,
+		chain: mainnet,
+		transport: http(rpcUrl),
+	});
+}
+
+/**
+ * Get ENS text record value
+ * @param name ENS name (e.g., 'example.eth')
+ * @param key Text record key (defaults to 'walrus')
+ * @param rpcUrl Ethereum RPC URL
+ * @returns Text record value or null if not found
+ */
+export async function getEnsTextRecord(
+	name: string, 
+	key: string = 'walrus', 
+	rpcUrl: string
+): Promise<string | null> {
+	try {
+		const client = createViemClient(rpcUrl);
+		
+		// Try getEnsText first (viem v2)
+		try {
+			return await getEnsText(client, {
+				name,
+				key,
+			});
+		} catch {
+					// Fallback to resolver.text if getEnsText is unavailable
+		const resolver = await getEnsResolver(client, { name });
+		if (resolver) {
+			// For now, just return null as the fallback since resolver.getText is not available
+			// This can be enhanced later when the proper API is available
+			return null;
+		}
+		}
+		
+		return null;
+	} catch (error) {
+		console.error('Error getting ENS text record:', error);
+		return null;
+	}
+}
+
+/**
+ * Set ENS text record value
+ * @param opts Options object containing name, value, rpcUrl, and privateKey
+ * @returns Transaction hash
+ */
+export async function setEnsTextRecord(opts: {
+	name: string;
+	value: string;
+	rpcUrl: string;
+	privateKey: `0x${string}`;
+}): Promise<`0x${string}`> {
+	// TODO: Implement setEnsTextRecord when proper viem API is available
+	throw new Error('setEnsTextRecord not yet implemented - requires proper viem resolver API');
+}
+
+/**
+ * Parse Walrus text record into structured mapping
+ * @param text Text record value
+ * @returns Parsed Walrus mapping or null if invalid
+ */
+export function parseWalrusText(text: string): WalrusMapping | null {
+	try {
+		// Check if it's a blob mapping
+		if (text.startsWith('blob:')) {
+			return { type: 'blob', id: text.substring(5) };
+		}
+		
+		// Check if it's a site mapping
+		const parsed = JSON.parse(text);
+		if (parsed.type === 'site' && parsed.id) {
+			return { type: 'site', id: parsed.id, index: parsed.index };
+		}
+		
+		return null;
+	} catch {
+		return null;
+	}
+}
+
+/**
+ * Convert Walrus mapping to text record value
+ * @param mapping Walrus mapping object
+ * @returns Text record value string
+ */
+export function stringifyWalrusMapping(mapping: WalrusMapping): string {
+	if (mapping.type === 'blob') {
+		return `blob:${mapping.id}`;
+	} else {
+		return JSON.stringify(mapping);
+	}
+}
+
+/**
+ * Resolve Walrus mapping from ENS name
+ * @param name ENS name (e.g., 'example.eth')
+ * @param rpcUrl Ethereum RPC URL
+ * @returns Parsed Walrus mapping or null if not found/invalid
+ */
+export async function resolveWalrusFromEns(
+	name: string, 
+	rpcUrl: string
+): Promise<WalrusMapping | null> {
+	try {
+		const textRecord = await getEnsTextRecord(name, 'walrus', rpcUrl);
+		if (!textRecord) {
+			return null;
+		}
+		
+		return parseWalrusText(textRecord);
+	} catch (error) {
+		console.error('Error resolving Walrus from ENS:', error);
+		return null;
+	}
+}
+</file>
 
 <file path=".eslintignore">
 dist/
@@ -189,168 +329,6 @@ dist/
 Cloudflare Worker that serves `https://<ens>.walrus.tools/*` by resolving ENS Text record `walrus` and proxying Walrus content with caching.
 </file>
 
-<file path="apps/gateway/src/worker.ts">
-import { Router } from 'itty-router';
-import { createPublicClient, http } from 'viem';
-import { getEnsText, getEnsResolver } from 'viem/ens';
-import { mainnet } from 'viem/chains';
-
-export interface Env {
-	WALRUS_BASE: string;
-	ETH_RPC_URL?: string;
-}
-
-// Create viem client for ENS resolution
-function createViemClient(env: Env) {
-	const rpcUrl = env.ETH_RPC_URL || 'https://eth.llamarpc.com';
-	return createPublicClient({
-		chain: mainnet,
-		transport: http(rpcUrl),
-	});
-}
-
-// Parse walrus mapping from ENS text record
-function parseWalrusMapping(text: string): { type: 'blob' | 'site'; id: string; index?: string } | null {
-	try {
-		// Check if it's a blob mapping
-		if (text.startsWith('blob:')) {
-			return { type: 'blob', id: text.substring(5) };
-		}
-		
-		// Check if it's a site mapping
-		const parsed = JSON.parse(text);
-		if (parsed.type === 'site' && parsed.id) {
-			return { type: 'site', id: parsed.id, index: parsed.index };
-		}
-		
-		return null;
-	} catch {
-		return null;
-	}
-}
-
-// Build Walrus URL from mapping and path
-function buildWalrusUrl(mapping: { type: 'blob' | 'site'; id: string; index?: string }, path: string, env: Env): string {
-	if (mapping.type === 'blob') {
-		return `${env.WALRUS_BASE}/blobs/${mapping.id}${path}`;
-	} else {
-		// For site type, use the index if specified, otherwise default to index.html
-		const indexPath = mapping.index || 'index.html';
-		if (path === '/' || path === '') {
-			return `${env.WALRUS_BASE}/sites/${mapping.id}/${indexPath}`;
-		}
-		return `${env.WALRUS_BASE}/sites/${mapping.id}${path}`;
-	}
-}
-
-const router = Router();
-
-router.get('/:ensName/*', async (request, env: Env) => {
-	const { params, url } = request as any;
-	const ensName = params.ensName;
-	let path = new URL(url).pathname.replace(`/${ensName}`, '') || '/';
-	
-	// Default to index.html for directory requests
-	if (path === '/' || path === '') {
-		path = '/index.html';
-	}
-
-	try {
-		// Resolve ENS name and get text record
-		const client = createViemClient(env);
-		let walrusText: string | null = null;
-		
-		try {
-			// Try getEnsText first (viem v2)
-			walrusText = await getEnsText(client, {
-				name: ensName,
-				key: 'walrus',
-			});
-		} catch {
-			// Fallback to resolver.text if getEnsText is unavailable
-			const resolver = await getEnsResolver(client, { name: ensName });
-			if (resolver) {
-				walrusText = await resolver.getText('walrus');
-			}
-		}
-
-		if (!walrusText) {
-			return new Response('ENS name not found or no walrus record', { status: 404 });
-		}
-
-		// Parse the walrus mapping
-		const mapping = parseWalrusMapping(walrusText);
-		if (!mapping) {
-			return new Response('Invalid walrus mapping format', { status: 400 });
-		}
-
-		// Build Walrus URL
-		const walrusUrl = buildWalrusUrl(mapping, path, env);
-
-		// Check cache first
-		const cacheKey = new Request(walrusUrl, request);
-		const cache = caches.default;
-		let response = await cache.match(cacheKey);
-		let cacheStatus = 'MISS';
-
-		if (response) {
-			cacheStatus = 'HIT';
-		} else {
-			// Fetch from upstream
-			const upstream = await fetch(walrusUrl, { 
-				headers: { 'Accept': 'application/octet-stream' } 
-			});
-
-			if (!upstream.ok) {
-				return new Response(`Upstream error: ${upstream.status}`, { 
-					status: upstream.status 
-				});
-			}
-
-			// Create response with proper headers
-			response = new Response(upstream.body, {
-				status: upstream.status,
-				headers: {
-					'Content-Type': upstream.headers.get('Content-Type') || 'application/octet-stream',
-					'Cache-Control': 'public, max-age=600',
-					'x-cache': cacheStatus,
-				}
-			});
-
-			// Cache the response
-			ctxWaitUntil(cache.put(cacheKey, response.clone()));
-		}
-
-		// Add cache status header to response
-		const responseHeaders = new Headers(response.headers);
-		responseHeaders.set('x-cache', cacheStatus);
-
-		return new Response(response.body, {
-			status: response.status,
-			headers: responseHeaders,
-		});
-
-	} catch (error) {
-		console.error('ENS resolution error:', error);
-		return new Response('Internal server error', { status: 500 });
-	}
-});
-
-router.all('*', () => new Response('Not found', { status: 404 }));
-
-export default {
-	fetch: (request: Request, env: Env, ctx: ExecutionContext) => router.handle(request, env, ctx)
-};
-
-function ctxWaitUntil(p: Promise<any>) {
-	try {
-		// @ts-ignore
-		const ctx: ExecutionContext | undefined = arguments?.callee?.caller?.arguments?.[2];
-		ctx?.waitUntil(p);
-	} catch {}
-}
-</file>
-
 <file path="apps/gateway/tsconfig.json">
 {
   "extends": "../../tsconfig.base.json",
@@ -362,20 +340,6 @@ function ctxWaitUntil(p: Promise<any>) {
   },
   "include": ["src"]
 }
-</file>
-
-<file path="apps/gateway/wrangler.toml">
-name = "walrens-gateway"
-main = "src/worker.ts"
-compatibility_date = "2024-08-15"
-node_compat = true
-
-[vars]
-WALRUS_BASE = "https://walrus.example/api"
-ETH_RPC_URL = "https://eth.llamarpc.com"
-
-[observability]
-enabled = true
 </file>
 
 <file path="docs/PRD.md">
@@ -699,7 +663,7 @@ npx walrens link mysite.eth ./dist
 import { Command } from 'commander';
 import chalk from 'chalk';
 import ora from 'ora';
-import { getGatewayUrl } from '@walrens/sdk';
+import { getGatewayUrl, publishToEns } from '@walrens/sdk';
 
 const program = new Command();
 program
@@ -712,16 +676,31 @@ program
 	.description('Upload to Walrus and write ENS walrus Text record')
 	.argument('<ensName>', 'ENS name or subname')
 	.argument('<pathOrFile>', 'Path to file or directory')
-	.option('--network <chain>', 'Target chain for ENS write')
+	.option('--network <chain>', 'Target chain for ENS write', 'sepolia')
 	.option('--text-only', 'Write Text record only, skip contenthash', true)
 	.action(async (ensName, pathOrFile, options) => {
 		const spinner = ora(`Linking ${ensName} to Walrus…`).start();
 		try {
-			// TODO: implement upload + ENS write
-			await new Promise((r) => setTimeout(r, 500));
+			// Get the private key: Read the user's private key from an environment variable
+			const privateKey = process.env.PRIVATE_KEY;
+			if (!privateKey) {
+				throw new Error('PRIVATE_KEY environment variable is not set. Please set it to your Ethereum private key.');
+			}
+			
+			// Update the spinner: Change the spinner's text to "Writing ENS record for ensName on network..."
+			spinner.text = `Writing ENS record for ${ensName} on ${options.network}...`;
+			
+			// Call the SDK: Call the publishToEns function
+			const result = await publishToEns(ensName, pathOrFile, {
+				network: options.network,
+				privateKey: process.env.PRIVATE_KEY,
+			});
+			
 			const url = getGatewayUrl(ensName);
 			spinner.succeed(`Linked ${chalk.cyan(ensName)} to Walrus.`);
 			console.log(`${chalk.gray('→')} Visit: ${chalk.green(url)}`);
+			console.log(`${chalk.gray('→')} Network: ${options.network}`);
+			console.log(`${chalk.gray('→')} Transaction: ${chalk.blue(result.txHash)}`);
 			process.exitCode = 0;
 		} catch (err) {
 			spinner.fail('Failed to link');
@@ -748,7 +727,8 @@ program.parseAsync().catch((err) => {
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
     "rootDir": "src",
-    "outDir": "dist"
+    "outDir": "dist",
+    "types": ["node"]
   },
   "include": ["src"]
 }
@@ -797,9 +777,19 @@ Exports:
 </file>
 
 <file path="packages/sdk/src/index.ts">
+import { createWalletClient, createPublicClient, http } from 'viem';
+import { privateKeyToAccount } from 'viem/accounts';
+import { mainnet, sepolia } from 'viem/chains';
+
 export type WalrusMapping =
 	| { type: 'blob'; id: string }
 	| { type: 'site'; id: string; index?: string };
+
+// This is the new mapping object for chains
+const chains: Record<string, any> = {
+	mainnet: mainnet,
+	sepolia: sepolia,
+};
 
 export interface ResolveOptions {
 	provider?: any;
@@ -808,6 +798,7 @@ export interface ResolveOptions {
 export interface PublishOptions {
 	network?: string;
 	textOnly?: boolean;
+	privateKey?: string;
 }
 
 export function getGatewayUrl(name: string, path: string = '/'): string {
@@ -815,18 +806,111 @@ export function getGatewayUrl(name: string, path: string = '/'): string {
 	return `https://${name}.walrus.tools${safePath}`;
 }
 
-export async function resolveWalrusFromEns(name: string, _opts: ResolveOptions = {}): Promise<WalrusMapping | null> {
-	// TODO: implement ENS lookup via viem. Placeholder returns null.
-	return null;
+// Re-export ENS functions
+export { 
+	getEnsTextRecord, 
+	setEnsTextRecord, 
+	parseWalrusText, 
+	stringifyWalrusMapping 
+} from './ens.js';
+
+export async function resolveWalrusFromEns(name: string, opts: ResolveOptions = {}): Promise<WalrusMapping | null> {
+	try {
+		// Check if provider (RPC URL) is provided
+		if (!opts.provider || typeof opts.provider !== 'string') {
+			return null; // No RPC URL provided
+		}
+
+		// Create a public viem client for Ethereum mainnet
+		const { createPublicClient, http } = await import('viem');
+		const { mainnet } = await import('viem/chains');
+		const { getEnsText } = await import('viem/ens');
+		
+		const client = createPublicClient({
+			chain: mainnet,
+			transport: http(opts.provider),
+		});
+
+		// Look up the 'walrus' text record for the provided ENS name
+		const textRecord = await getEnsText(client, {
+			name,
+			key: 'walrus',
+		});
+
+		// If the result is a non-empty string, parse it using WalrusTextSchema.parse()
+		if (textRecord && textRecord.trim() !== '') {
+			return WalrusTextSchema.parse(textRecord);
+		}
+
+		// Return null if the text record is not found or is empty
+		return null;
+	} catch (error) {
+		// Handle any potential errors gracefully
+		console.error('Error resolving Walrus from ENS:', error);
+		return null;
+	}
 }
 
 export async function publishToEns(
 	name: string,
-	payload: Blob | Uint8Array | ArrayBuffer | string,
-	_opts: PublishOptions = {}
+	payload: Blob | Uint8Array | ArrayBuffer | string, // Note: payload is unused for now
+	opts: PublishOptions = {}
 ): Promise<{ txHash: string }> {
-	// TODO: implement upload + ENS text record write.
-	return { txHash: '0x' };
+	const { network = 'sepolia', privateKey } = opts;
+	if (!privateKey) {
+		throw new Error('A private key is required to publish to ENS.');
+	}
+
+	const chain = chains[network];
+	if (!chain) {
+		throw new Error(`Invalid network specified: ${network}. Use 'mainnet' or 'sepolia'.`);
+	}
+
+	// For now, we'll use a mock mapping. We will replace this later.
+	const mapping: WalrusMapping = { type: 'site', id: 'mock-walrus-id-123' };
+	const valueToSet = WalrusTextSchema.stringify(mapping);
+
+	const account = privateKeyToAccount(privateKey as `0x${string}`);
+
+	const walletClient = createWalletClient({
+		account,
+		chain: chain,
+		transport: http(),
+	});
+
+	// Get the resolver for the ENS name
+	const { getEnsResolver } = await import('viem/ens');
+	const publicClient = createPublicClient({
+		chain: chain,
+		transport: http(),
+	});
+	
+	const resolver = await getEnsResolver(publicClient, { name });
+	if (!resolver) {
+		throw new Error(`No resolver found for ENS name: ${name}`);
+	}
+	
+	// Set the text record using the resolver contract
+	const txHash = await walletClient.writeContract({
+		address: resolver as `0x${string}`,
+		abi: [
+			{
+				inputs: [
+					{ name: 'node', type: 'bytes32' },
+					{ name: 'key', type: 'string' },
+					{ name: 'value', type: 'string' }
+				],
+				name: 'setText',
+				outputs: [],
+				stateMutability: 'nonpayable',
+				type: 'function'
+			}
+		],
+		functionName: 'setText',
+		args: [name as `0x${string}`, 'walrus', valueToSet],
+	});
+
+	return { txHash };
 }
 
 export const WalrusTextSchema = {
@@ -889,6 +973,182 @@ packages:
   },
   "exclude": ["node_modules", "dist"]
 }
+</file>
+
+<file path="apps/gateway/src/worker.ts">
+import { Router } from 'itty-router';
+import { createPublicClient, http } from 'viem';
+import { getEnsText, getEnsResolver } from 'viem/ens';
+import { mainnet } from 'viem/chains';
+
+export interface Env {
+	WALRUS_BASE: string;
+	ETH_RPC_URL?: string;
+}
+
+// Create viem client for ENS resolution
+function createViemClient(env: Env) {
+	const rpcUrl = env.ETH_RPC_URL || 'https://eth.llamarpc.com';
+	return createPublicClient({
+		chain: mainnet,
+		transport: http(rpcUrl),
+	});
+}
+
+// Parse walrus mapping from ENS text record
+function parseWalrusMapping(text: string): { type: 'blob' | 'site'; id: string; index?: string } | null {
+	try {
+		// Check if it's a blob mapping
+		if (text.startsWith('blob:')) {
+			return { type: 'blob', id: text.substring(5) };
+		}
+		
+		// Check if it's a site mapping
+		const parsed = JSON.parse(text);
+		if (parsed.type === 'site' && parsed.id) {
+			return { type: 'site', id: parsed.id, index: parsed.index };
+		}
+		
+		return null;
+	} catch {
+		return null;
+	}
+}
+
+// Build Walrus URL from mapping and path
+function buildWalrusUrl(mapping: { type: 'blob' | 'site'; id: string; index?: string }, path: string, env: Env): string {
+	if (mapping.type === 'blob') {
+		return `${env.WALRUS_BASE}/blobs/${mapping.id}${path}`;
+	} else {
+		// For site type, use the index if specified, otherwise default to index.html
+		const indexPath = mapping.index || 'index.html';
+		if (path === '/' || path === '') {
+			return `${env.WALRUS_BASE}/sites/${mapping.id}/${indexPath}`;
+		}
+		return `${env.WALRUS_BASE}/sites/${mapping.id}${path}`;
+	}
+}
+
+const router = Router();
+
+router.get('/:ensName/*', async (request, env: Env) => {
+	const { params, url } = request as any;
+	const ensName = params.ensName;
+	let path = new URL(url).pathname.replace(`/${ensName}`, '') || '/';
+	
+	// Default to index.html for directory requests
+	if (path === '/' || path === '') {
+		path = '/index.html';
+	}
+
+	try {
+		// Resolve ENS name and get text record
+		const client = createViemClient(env);
+		let walrusText: string | null = null;
+		
+		try {
+			// Try getEnsText first (viem v2)
+			walrusText = await getEnsText(client, {
+				name: ensName,
+				key: 'walrus',
+			});
+		} catch {
+			// Fallback to resolver.text if getEnsText is unavailable
+			const resolver = await getEnsResolver(client, { name: ensName });
+			if (resolver) {
+				walrusText = await resolver.getText('walrus');
+			}
+		}
+
+		if (!walrusText) {
+			return new Response('ENS name not found or no walrus record', { status: 404 });
+		}
+
+		// Parse the walrus mapping
+		const mapping = parseWalrusMapping(walrusText);
+		if (!mapping) {
+			return new Response('Invalid walrus mapping format', { status: 400 });
+		}
+
+		// Build Walrus URL
+		const walrusUrl = buildWalrusUrl(mapping, path, env);
+
+		// Check cache first
+		const cacheKey = new Request(walrusUrl, request);
+		const cache = caches.default;
+		let response = await cache.match(cacheKey);
+		let cacheStatus = 'MISS';
+
+		if (response) {
+			cacheStatus = 'HIT';
+		} else {
+			// Fetch from upstream
+			const upstream = await fetch(walrusUrl, { 
+				headers: { 'Accept': 'application/octet-stream' } 
+			});
+
+			if (!upstream.ok) {
+				return new Response(`Upstream error: ${upstream.status}`, { 
+					status: upstream.status 
+				});
+			}
+
+			// Create response with proper headers
+			response = new Response(upstream.body, {
+				status: upstream.status,
+				headers: {
+					'Content-Type': upstream.headers.get('Content-Type') || 'application/octet-stream',
+					'Cache-Control': 'public, max-age=600',
+					'x-cache': cacheStatus,
+				}
+			});
+
+			// Cache the response
+			ctxWaitUntil(cache.put(cacheKey, response.clone()));
+		}
+
+		// Add cache status header to response
+		const responseHeaders = new Headers(response.headers);
+		responseHeaders.set('x-cache', cacheStatus);
+
+		return new Response(response.body, {
+			status: response.status,
+			headers: responseHeaders,
+		});
+
+	} catch (error) {
+		console.error('ENS resolution error:', error);
+		return new Response('Internal server error', { status: 500 });
+	}
+});
+
+router.all('*', () => new Response('Not found', { status: 404 }));
+
+export default {
+	fetch: (request: Request, env: Env, ctx: ExecutionContext) => router.handle(request, env, ctx)
+};
+
+function ctxWaitUntil(p: Promise<any>) {
+	try {
+		// @ts-ignore
+		const ctx: ExecutionContext | undefined = arguments?.callee?.caller?.arguments?.[2];
+		ctx?.waitUntil(p);
+	} catch {}
+}
+</file>
+
+<file path="apps/gateway/wrangler.toml">
+name = "walrens-gateway"
+main = "src/worker.ts"
+compatibility_date = "2024-08-15"
+node_compat = true
+
+[vars]
+WALRUS_BASE = "https://walrus.example/api"
+ETH_RPC_URL = "https://eth.llamarpc.com"
+
+[observability]
+enabled = true
 </file>
 
 <file path="README.md">

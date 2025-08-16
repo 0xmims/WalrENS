@@ -2,7 +2,7 @@
 import { Command } from 'commander';
 import chalk from 'chalk';
 import ora from 'ora';
-import { getGatewayUrl } from '@walrens/sdk';
+import { getGatewayUrl, publishToEns } from '@walrens/sdk';
 
 const program = new Command();
 program
@@ -15,16 +15,31 @@ program
 	.description('Upload to Walrus and write ENS walrus Text record')
 	.argument('<ensName>', 'ENS name or subname')
 	.argument('<pathOrFile>', 'Path to file or directory')
-	.option('--network <chain>', 'Target chain for ENS write')
+	.option('--network <chain>', 'Target chain for ENS write', 'sepolia')
 	.option('--text-only', 'Write Text record only, skip contenthash', true)
 	.action(async (ensName, pathOrFile, options) => {
 		const spinner = ora(`Linking ${ensName} to Walrus…`).start();
 		try {
-			// TODO: implement upload + ENS write
-			await new Promise((r) => setTimeout(r, 500));
+			// Get the private key: Read the user's private key from an environment variable
+			const privateKey = process.env.PRIVATE_KEY;
+			if (!privateKey) {
+				throw new Error('PRIVATE_KEY environment variable is not set. Please set it to your Ethereum private key.');
+			}
+			
+			// Update the spinner: Change the spinner's text to "Writing ENS record for ensName on network..."
+			spinner.text = `Writing ENS record for ${ensName} on ${options.network}...`;
+			
+			// Call the SDK: Call the publishToEns function
+			const result = await publishToEns(ensName, pathOrFile, {
+				network: options.network,
+				privateKey: process.env.PRIVATE_KEY,
+			});
+			
 			const url = getGatewayUrl(ensName);
 			spinner.succeed(`Linked ${chalk.cyan(ensName)} to Walrus.`);
 			console.log(`${chalk.gray('→')} Visit: ${chalk.green(url)}`);
+			console.log(`${chalk.gray('→')} Network: ${options.network}`);
+			console.log(`${chalk.gray('→')} Transaction: ${chalk.blue(result.txHash)}`);
 			process.exitCode = 0;
 		} catch (err) {
 			spinner.fail('Failed to link');
