@@ -1,0 +1,10 @@
+name = "walrens-gateway"
+main = "src/worker.ts"
+compatibility_date = "2024-08-15"
+node_compat = true
+
+[vars]
+WALRUS_BASE = "https://walrus.example/api"
+
+[observability]
+enabled = true

@@ -1,0 +1,27 @@
+{
+  "name": "@walrens/sdk",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsup src/index.ts --format esm --dts --sourcemap",
+    "dev": "tsup src/index.ts --format esm --dts --sourcemap --watch",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "zod": "^3.23.8",
+    "viem": "^2.16.3"
+  },
+  "devDependencies": {
+    "tsup": "^8.0.2",
+    "typescript": "^5.5.4",
+    "vitest": "^2.0.5"
+  }
+}
