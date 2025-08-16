@@ -1,0 +1,12 @@
+{
+  "name": "@walrens/example-site",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "build": "node scripts/build.js",
+    "dev": "node scripts/build.js && chokidar 'public/**/*' -c 'node scripts/build.js'"
+  },
+  "devDependencies": {
+    "chokidar-cli": "^3.0.0"
+  }
+}
