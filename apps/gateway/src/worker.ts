@@ -1,5 +1,6 @@
 import { Router } from 'itty-router';
 import { createPublicClient, http } from 'viem';
+import { mainnet } from 'viem/chains';
 
 export interface Env {
 	WALRUS_BASE: string;
@@ -47,7 +48,7 @@ router.get('/:ensName/*', async (request, env: Env, ctx: ExecutionContext) => {
 	const pathAfterName = pathname.slice(ensName.length + 1); // keeps leading '/' if present
 
 	// Resolve ENS Text record "walrus"
-	const client = createPublicClient({ transport: http(env.ETH_RPC_URL) });
+	const client = createPublicClient({ chain: mainnet, transport: http(env.ETH_RPC_URL) });
 	let textValue: string | null = null;
 	try {
 		// @ts-ignore - viem client has getEnsText in v2
