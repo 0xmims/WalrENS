@@ -1,0 +1,911 @@
+This file is a merged representation of the entire codebase, combined into a single document by Repomix.
+
+<file_summary>
+This section contains a summary of this file.
+
+<purpose>
+This file contains a packed representation of the entire repository's contents.
+It is designed to be easily consumable by AI systems for analysis, code review,
+or other automated processes.
+</purpose>
+
+<file_format>
+The content is organized as follows:
+1. This summary section
+2. Repository information
+3. Directory structure
+4. Repository files (if enabled)
+5. Multiple file entries, each consisting of:
+  - File path as an attribute
+  - Full contents of the file
+</file_format>
+
+<usage_guidelines>
+- This file should be treated as read-only. Any changes should be made to the
+  original repository files, not this packed version.
+- When processing this file, use the file path to distinguish
+  between different files in the repository.
+- Be aware that this file may contain sensitive information. Handle it with
+  the same level of security as you would the original repository.
+</usage_guidelines>
+
+<notes>
+- Some files may have been excluded based on .gitignore rules and Repomix's configuration
+- Binary files are not included in this packed representation. Please refer to the Repository Structure section for a complete list of file paths, including binary files
+- Files matching patterns in .gitignore are excluded
+- Files matching default ignore patterns are excluded
+- Files are sorted by Git change count (files with more changes are at the bottom)
+</notes>
+
+</file_summary>
+
+<directory_structure>
+.eslintignore
+.gitignore
+.npmrc
+apps/example-site/package.json
+apps/example-site/public/index.html
+apps/example-site/scripts/build.js
+apps/gateway/.gitignore
+apps/gateway/package.json
+apps/gateway/README.md
+apps/gateway/src/worker.ts
+apps/gateway/tsconfig.json
+apps/gateway/wrangler.toml
+docs/PRD.md
+docs/README.md
+package.json
+packages/cli/package.json
+packages/cli/README.md
+packages/cli/src/index.ts
+packages/cli/tsconfig.json
+packages/sdk/package.json
+packages/sdk/README.md
+packages/sdk/src/index.ts
+packages/sdk/tsconfig.json
+pnpm-workspace.yaml
+README.md
+tsconfig.base.json
+</directory_structure>
+
+<files>
+This section contains the contents of the repository's files.
+
+<file path=".eslintignore">
+dist/
+node_modules/
+.wrangler/
+</file>
+
+<file path=".gitignore">
+node_modules/
+.DS_Store
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+.env
+.env.*
+dist/
+build/
+.wrangler/
+.vscode/
+.idea/
+coverage/
+.tmp/
+.clasp.json
+</file>
+
+<file path=".npmrc">
+save-exact=true
+</file>
+
+<file path="apps/example-site/package.json">
+{
+  "name": "@walrens/example-site",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "build": "node scripts/build.js",
+    "dev": "node scripts/build.js && chokidar 'public/**/*' -c 'node scripts/build.js'"
+  },
+  "devDependencies": {
+    "chokidar-cli": "^3.0.0"
+  }
+}
+</file>
+
+<file path="apps/example-site/public/index.html">
+<!doctype html>
+<html>
+<head>
+	<meta charset="utf-8" />
+	<meta name="viewport" content="width=device-width, initial-scale=1" />
+	<title>WalrENS Demo</title>
+	<style>
+		body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Cantarell,Noto Sans,sans-serif;line-height:1.4;margin:2rem}
+		code{background:#f5f5f5;padding:.2rem .4rem;border-radius:4px}
+	</style>
+</head>
+<body>
+	<h1>WalrENS Demo</h1>
+	<p>If you can see this via <code>https://&lt;ens&gt;.walrus.tools/</code>, resolution works.</p>
+</body>
+</html>
+</file>
+
+<file path="apps/example-site/scripts/build.js">
+const { mkdirSync, readFileSync, writeFileSync, readdirSync, statSync } = require('fs');
+const { join, dirname } = require('path');
+
+function copyRecursive(src, dest) {
+	const stats = statSync(src);
+	if (stats.isDirectory()) {
+		mkdirSync(dest, { recursive: true });
+		for (const entry of readdirSync(src)) {
+			copyRecursive(join(src, entry), join(dest, entry));
+		}
+	} else {
+		mkdirSync(dirname(dest), { recursive: true });
+		writeFileSync(dest, readFileSync(src));
+	}
+}
+
+const srcDir = join(process.cwd(), 'public');
+const outDir = join(process.cwd(), 'dist');
+copyRecursive(srcDir, outDir);
+console.log('Built example site to', outDir);
+</file>
+
+<file path="apps/gateway/.gitignore">
+dist/
+</file>
+
+<file path="apps/gateway/package.json">
+{
+  "name": "@walrens/gateway",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev --local --persist | cat",
+    "build": "wrangler deploy --dry-run | cat",
+    "deploy": "wrangler deploy"
+  },
+  "dependencies": {
+    "itty-router": "^4.0.23",
+    "viem": "^2.16.3"
+  },
+  "devDependencies": {
+    "wrangler": "^3.80.0",
+    "typescript": "^5.5.4"
+  }
+}
+</file>
+
+<file path="apps/gateway/README.md">
+# @walrens/gateway
+
+Cloudflare Worker that serves `https://<ens>.walrus.tools/*` by resolving ENS Text record `walrus` and proxying Walrus content with caching.
+</file>
+
+<file path="apps/gateway/src/worker.ts">
+import { Router } from 'itty-router';
+import { createPublicClient, http } from 'viem';
+import { getEnsText, getEnsResolver } from 'viem/ens';
+import { mainnet } from 'viem/chains';
+
+export interface Env {
+	WALRUS_BASE: string;
+	ETH_RPC_URL?: string;
+}
+
+// Create viem client for ENS resolution
+function createViemClient(env: Env) {
+	const rpcUrl = env.ETH_RPC_URL || 'https://eth.llamarpc.com';
+	return createPublicClient({
+		chain: mainnet,
+		transport: http(rpcUrl),
+	});
+}
+
+// Parse walrus mapping from ENS text record
+function parseWalrusMapping(text: string): { type: 'blob' | 'site'; id: string; index?: string } | null {
+	try {
+		// Check if it's a blob mapping
+		if (text.startsWith('blob:')) {
+			return { type: 'blob', id: text.substring(5) };
+		}
+		
+		// Check if it's a site mapping
+		const parsed = JSON.parse(text);
+		if (parsed.type === 'site' && parsed.id) {
+			return { type: 'site', id: parsed.id, index: parsed.index };
+		}
+		
+		return null;
+	} catch {
+		return null;
+	}
+}
+
+// Build Walrus URL from mapping and path
+function buildWalrusUrl(mapping: { type: 'blob' | 'site'; id: string; index?: string }, path: string, env: Env): string {
+	if (mapping.type === 'blob') {
+		return `${env.WALRUS_BASE}/blobs/${mapping.id}${path}`;
+	} else {
+		// For site type, use the index if specified, otherwise default to index.html
+		const indexPath = mapping.index || 'index.html';
+		if (path === '/' || path === '') {
+			return `${env.WALRUS_BASE}/sites/${mapping.id}/${indexPath}`;
+		}
+		return `${env.WALRUS_BASE}/sites/${mapping.id}${path}`;
+	}
+}
+
+const router = Router();
+
+router.get('/:ensName/*', async (request, env: Env) => {
+	const { params, url } = request as any;
+	const ensName = params.ensName;
+	let path = new URL(url).pathname.replace(`/${ensName}`, '') || '/';
+	
+	// Default to index.html for directory requests
+	if (path === '/' || path === '') {
+		path = '/index.html';
+	}
+
+	try {
+		// Resolve ENS name and get text record
+		const client = createViemClient(env);
+		let walrusText: string | null = null;
+		
+		try {
+			// Try getEnsText first (viem v2)
+			walrusText = await getEnsText(client, {
+				name: ensName,
+				key: 'walrus',
+			});
+		} catch {
+			// Fallback to resolver.text if getEnsText is unavailable
+			const resolver = await getEnsResolver(client, { name: ensName });
+			if (resolver) {
+				walrusText = await resolver.getText('walrus');
+			}
+		}
+
+		if (!walrusText) {
+			return new Response('ENS name not found or no walrus record', { status: 404 });
+		}
+
+		// Parse the walrus mapping
+		const mapping = parseWalrusMapping(walrusText);
+		if (!mapping) {
+			return new Response('Invalid walrus mapping format', { status: 400 });
+		}
+
+		// Build Walrus URL
+		const walrusUrl = buildWalrusUrl(mapping, path, env);
+
+		// Check cache first
+		const cacheKey = new Request(walrusUrl, request);
+		const cache = caches.default;
+		let response = await cache.match(cacheKey);
+		let cacheStatus = 'MISS';
+
+		if (response) {
+			cacheStatus = 'HIT';
+		} else {
+			// Fetch from upstream
+			const upstream = await fetch(walrusUrl, { 
+				headers: { 'Accept': 'application/octet-stream' } 
+			});
+
+			if (!upstream.ok) {
+				return new Response(`Upstream error: ${upstream.status}`, { 
+					status: upstream.status 
+				});
+			}
+
+			// Create response with proper headers
+			response = new Response(upstream.body, {
+				status: upstream.status,
+				headers: {
+					'Content-Type': upstream.headers.get('Content-Type') || 'application/octet-stream',
+					'Cache-Control': 'public, max-age=600',
+					'x-cache': cacheStatus,
+				}
+			});
+
+			// Cache the response
+			ctxWaitUntil(cache.put(cacheKey, response.clone()));
+		}
+
+		// Add cache status header to response
+		const responseHeaders = new Headers(response.headers);
+		responseHeaders.set('x-cache', cacheStatus);
+
+		return new Response(response.body, {
+			status: response.status,
+			headers: responseHeaders,
+		});
+
+	} catch (error) {
+		console.error('ENS resolution error:', error);
+		return new Response('Internal server error', { status: 500 });
+	}
+});
+
+router.all('*', () => new Response('Not found', { status: 404 }));
+
+export default {
+	fetch: (request: Request, env: Env, ctx: ExecutionContext) => router.handle(request, env, ctx)
+};
+
+function ctxWaitUntil(p: Promise<any>) {
+	try {
+		// @ts-ignore
+		const ctx: ExecutionContext | undefined = arguments?.callee?.caller?.arguments?.[2];
+		ctx?.waitUntil(p);
+	} catch {}
+}
+</file>
+
+<file path="apps/gateway/tsconfig.json">
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "src",
+    "outDir": "dist",
+    "lib": ["ES2022", "WebWorker"],
+    "types": ["@cloudflare/workers-types"]
+  },
+  "include": ["src"]
+}
+</file>
+
+<file path="apps/gateway/wrangler.toml">
+name = "walrens-gateway"
+main = "src/worker.ts"
+compatibility_date = "2024-08-15"
+node_compat = true
+
+[vars]
+WALRUS_BASE = "https://walrus.example/api"
+ETH_RPC_URL = "https://eth.llamarpc.com"
+
+[observability]
+enabled = true
+</file>
+
+<file path="docs/PRD.md">
+# PRD — WalrENS (ENS ↔ Walrus Developer Tool)
+**Version:** 0.3  
+**Owner:** Darren Mims  
+**Date:** 2025-08-16 (America/New_York)
+
+---
+
+## 1) Summary & Goals
+**One-liner:** A tiny SDK + CLI + gateway that lets any **ENS** name (or subname) resolve to **Walrus** blobs or static sites.
+
+**DX example:**  
+`npx walrens link mysite.eth ./dist` → uploads to Walrus, writes an ENS record, and your site is live at `https://mysite.eth.walrus.tools/`.
+
+**Primary goals**
+- Ship a new, open-source dev tool that **uploads to Walrus** and **binds** the result to an **ENS** name in one command.
+- Provide a **read path** (SDK + HTTP gateway) so apps/browsers can resolve `name.eth → Walrus blob/site`.
+- Deliver a polished demo + docs that meet the ETHGlobal **Walrus Dev Tool** and **ENS** prize criteria.
+
+**Why this is a weekend build**
+- No new contracts required; small surface (CLI/SDK/Worker); simple end-to-end demo.
+- Stretch items (contenthash codec, L2 Primary Names) are optional and modular.
+
+---
+
+## 2) Success Metrics (Hackathon)
+- ✅ CLI publishes a demo site to Walrus and writes ENS metadata end-to-end on testnet.
+- ✅ Gateway serves `https://<ens>.walrus.tools/` with **<200ms p95** overhead after warm cache.
+- ✅ Repo includes README + 2-minute demo video + architecture diagram.
+- ✅ Meets Walrus tool and ENS prize bars (functional, obvious ENS value; no hard-coded values).
+
+---
+
+## 3) Scope
+### In-scope (MVP)
+- **CLI:** `walrens link <ens> <path|file>` → upload to Walrus → write ENS **Text record** key `walrus`.
+- **SDK (TS):** publish & resolve helpers.
+- **Gateway (Cloudflare Worker):** `/:ens/*path` → ENS lookup → Walrus fetch → cache → serve.
+- **Minimal example site** and docs.
+
+### Stretch (optional)
+- **L2 Primary Name** helper (Base/OP) using `L2ReverseRegistrar` + UI display.
+- **Experimental `contenthash`** support using a `walrus://` codec (Text record remains canonical).
+- **Auto-backup/reseal** script if Walrus has TTL/expiry semantics.
+
+### Out-of-scope
+- Custom ENS Resolver contracts; complex auth/billing; browser-native Walrus fetches.
+
+---
+
+## 4) Users & Use-cases
+- **Frontend devs:** host static sites via ENS → Walrus.
+- **Tooling devs:** resolve content by ENS in dapps.
+- **DAOs/teams:** docs & microsites tied to existing ENS names.
+
+---
+
+## 5) Product Requirements
+### 5.1 CLI (Node/TypeScript)
+**Command:**  
+`walrens link <ensName> <pathOrFile> [--network <chain>] [--text-only] [--contenthash]`
+
+**Behavior:**
+1) Upload to Walrus (file → `blobId`, directory → `siteId`).
+2) Write ENS **Text record** `walrus=…` with either:
+   - `blob:<id>`
+   - JSON `{"type":"site","id":"<id>","index":"/index.html"}`
+3) (Optional) Also set `contenthash` with experimental `walrus://<id>` encoding (documented; non-blocking).
+4) Print gateway URL: `https://<ens>.walrus.tools/`.
+
+**Errors:** clear messages for RPC failures, ENS permissions, upload limits.  
+**Exit codes:** `0` success; `1` user error; `2` network error.
+
+### 5.2 SDK (TypeScript)
+- `resolveWalrusFromEns(name, { rpcUrl? }) → { type:'blob'|'site', id, index? } | null`
+- `publishToEns(name, mapping, { rpcUrl?, privateKey }) → { txHash }`
+- `getGatewayUrl(name, path?) → string`
+- Parse `walrus` Text record values (`blob:<id>` or the site JSON).
+
+### 5.3 Gateway (Cloudflare Worker)
+- **Route:** `GET /:ensName/*path`
+- **Flow:** ENS `walrus` text record → parse mapping → build Walrus fetch URL → stream → cache (ETag/`Cache-Control: public, max-age=600`).
+- **Static site routing:** default `/index.html` for directory paths.
+- **Observability:** simple logs; request/response timing; cache hit ratio.
+
+---
+
+## 6) ENS Mapping Strategy (MVP)
+**Canonical:** **Text record** key `walrus`.
+
+**Values**
+- **Blob:** `blob:<id>`
+- **Site:** `{"type":"site","id":"<id>","index":"/index.html"}`
+
+**Optional:** also set `contenthash` with a `walrus://<id>` experimental codec (documented; not required for the demo).
+
+---
+
+## 7) Architecture
+
+```
+Dev → CLI (upload) ──HTTP──> Walrus
+                    │
+                    └─RPC──> ENS write (Text record; optional contenthash)
+User → Gateway ──RPC──> ENS read ──HTTP──> Walrus Fetch ──→ Browser
+```
+
+---
+
+## 8) Technical Design & Dependencies
+- **Languages/Frameworks:** Node 20+, TypeScript, Cloudflare Workers.
+- **Libs:** `viem` (ENS reads/writes), `zod`, `commander`, `undici`/`node-fetch`, `tsup`.
+- **Build/Test:** `pnpm`, `vitest`.
+- **Env vars:**  
+  - `ETH_RPC_URL` — Ethereum RPC for ENS reads/writes  
+  - `WALRUS_API_BASE` — Walrus read (and later upload) base URL  
+  - (optional) `CF_ACCOUNT_ID` / `CF_API_TOKEN` for Worker deploy
+
+### 8.1 Repo Layout (Monorepo)
+```
+/packages
+  /cli            # walrens CLI
+  /sdk            # resolver + publisher TS SDK
+/apps
+  /gateway        # Cloudflare Worker
+  /example-site   # tiny static demo (index.html)
+/docs             # diagrams + submission assets + PRD.md
+```
+
+### 8.2 Scripts
+```
+pnpm dev:gateway   # local worker
+pnpm dev:cli       # CLI in watch mode
+pnpm build         # build all packages
+pnpm test          # unit tests
+pnpm demo          # end-to-end demo script
+```
+
+---
+
+## 9) Cursor & Claude Execution Plan
+
+> **Add this PRD to the repo at `docs/PRD.md`. Use the tasks below one-by-one (file-scoped).**
+
+### Task Prompt Template (for Cursor/Claude)
+```
+[WalrENS PRD v0.3] Implement <task name>
+File: <relative/path>
+
+Context (from PRD):
+- §5.3 Gateway (route + caching) / §5.1 CLI / §5.2 SDK (pick relevant)
+- §6 ENS Mapping (text record format)
+- §8 Technical (env vars, deps)
+
+Do:
+- <bullet 1>
+- <bullet 2>
+
+Don’t:
+- Don’t modify other files
+- Don’t add deps not listed in PRD
+- Keep public APIs stable
+
+Acceptance:
+- <command to run> returns 200 and serves bytes (or prints tx hash)
+- Directory paths default to /index.html
+- Logs show cache HIT on second request
+```
+
+### Concrete Tasks (initial four)
+1. **Gateway ENS read + Walrus proxy**  
+   Implement `GET /:ensName/*` reading Text record **`walrus`** via `ETH_RPC_URL`, parse `blob:<id>` or site JSON, build Walrus URL using `WALRUS_API_BASE`, proxy with caching, default `/index.html`. Remove any `ctxWaitUntil` shim and use `ctx.waitUntil` directly.  
+   **Acceptance:**  
+   - `pnpm dev:gateway` runs.  
+   - With `walrus=blob:<id>` set on a test ENS name, `http://127.0.0.1:8787/<name>/` returns 200.  
+   - Second request shows cache HIT.
+
+2. **Wrangler env wiring**  
+   Add `ETH_RPC_URL` and `WALRUS_API_BASE` under `[vars]` in `apps/gateway/wrangler.toml`.  
+   **Acceptance:** Worker boots; both vars available.
+
+3. **SDK ENS helpers**  
+   Implement:  
+   - `getEnsTextRecord(name,'walrus',rpcUrl?) → string|null`  
+   - `setEnsTextRecord({name,key:'walrus',value,rpcUrl,privateKey}) → txHash`  
+   - `resolveWalrusFromEns(name,rpcUrl?) → {type:'blob'|'site', id, index?} | null`  
+   **Acceptance:** Node REPL returns parsed mapping; `setEnsTextRecord` updates the record.
+
+4. **CLI link (demo without upload yet)**  
+   `link <ens> <path>` with flags: `--id <walrusId>`, `--site`, `--rpc`, `--pk`.  
+   If `--id` present, skip upload and write the ENS text record using the SDK; print `https://<ens>.walrus.tools/`.  
+   **Acceptance:** Running:  
+   ```
+   node packages/cli/dist/index.js link yoursub.yourname.eth apps/example-site \
+     --id DEMO123 --site --pk 0x... --rpc https://...
+   ```  
+   updates the ENS record and prints the gateway URL.
+
+*(Add Walrus upload as a 5th task once the upload endpoint/format is confirmed.)*
+
+---
+
+## 10) Milestones & Timeline (Fast Track)
+- **M1 — Core ENS read/write + gateway** (4–6h)
+- **M2 — CLI link with `--id` + swap to real upload** (4–6h)
+- **M3 — Example site + SDK polish** (3–4h)
+- **M4 — Docs + demo video + deploy** (2–3h)
+- **Stretch — L2 Primary Name** (2–3h)
+
+---
+
+## 11) Testing & Acceptance
+**Unit**
+- Text record parse/stringify; (optional) `walrus://` contenthash round-trip.
+
+**Integration**
+- Mock Walrus upload → ENS write → gateway resolves & serves.
+- Cache behavior: first request MISS, second HIT.
+
+**Demo Acceptance**
+- `walrens link yoursub.yourname.eth ./apps/example-site --id <id> --site` prints tx hash + gateway URL.
+- Visiting the gateway URL renders the page.
+
+---
+
+## 12) Risks & Mitigations
+- **Walrus API variability:** keep assets small; stream uploads; handle chunk errors; document limits.
+- **ENS gas/permissions:** use testnets or funded key; check resolver presence; friendly errors.
+- **`contenthash` compatibility:** keep Text record canonical; mark `contenthash` as experimental.
+
+---
+
+## 13) Hand-off Checklist (what’s needed)
+- Walrus **read** & **upload** endpoints + auth + sample responses.
+- Confirm blob/site **ID format** and site path routing (default index).
+- Preferred target **networks** and a **test ENS name/subname** we can modify.
+- (Optional) `L2ReverseRegistrar` addresses for Base/OP if pursuing the L2 prize.
+
+---
+
+## 14) Executive Explanation of Goals
+**What we’re building:** A developer tool that binds human-readable ENS names to content stored on Walrus, with a trivial DX (one command) and a simple resolution path (HTTP gateway + SDK).
+
+**Why it matters:** ENS is where identity and discovery live in Ethereum; Walrus offers low-cost, durable content addressing. Joining them unlocks ENS-addressed sites, docs, and media without bespoke infra.
+
+**Hackathon fit:** Minimal blast radius (no contracts) and visible demo value. Judges can run one CLI command, watch an ENS record change, and load a live site via the gateway.
+
+**Post-hack potential:** Formalize a `walrus://` `contenthash` codec, ship a Vite/Next plugin, add auto-repack/reseal service, and optionally a browser resolver extension.
+</file>
+
+<file path="docs/README.md">
+# Docs
+
+- See top-level PRD in the issue description for full scope.
+- This folder will include architecture diagrams, prize submission checklist, and the short demo video link.
+</file>
+
+<file path="package.json">
+{
+  "name": "walrens-monorepo",
+  "private": true,
+  "version": "0.1.0",
+  "packageManager": "pnpm@9.0.0",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "pnpm -r build",
+    "test": "pnpm -r test",
+    "dev:cli": "pnpm --filter @walrens/cli dev",
+    "dev:gateway": "pnpm --filter @walrens/gateway dev",
+    "demo": "pnpm --filter @walrens/cli demo"
+  }
+}
+</file>
+
+<file path="packages/cli/package.json">
+{
+  "name": "@walrens/cli",
+  "version": "0.1.0",
+  "type": "module",
+  "bin": {
+    "walrens": "dist/index.js"
+  },
+  "scripts": {
+    "build": "tsup src/index.ts --format esm --sourcemap",
+    "dev": "tsup src/index.ts --format esm --watch",
+    "demo": "node dist/index.js demo",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@walrens/sdk": "workspace:*",
+    "commander": "^12.1.0",
+    "ora": "^8.1.0",
+    "chalk": "^5.3.0"
+  },
+  "devDependencies": {
+    "tsup": "^8.0.2",
+    "typescript": "^5.5.4",
+    "vitest": "^2.0.5"
+  }
+}
+</file>
+
+<file path="packages/cli/README.md">
+# @walrens/cli
+
+CLI to link ENS names to Walrus blobs/sites.
+
+Usage:
+
+```bash
+npx walrens link mysite.eth ./dist
+```
+</file>
+
+<file path="packages/cli/src/index.ts">
+#!/usr/bin/env node
+import { Command } from 'commander';
+import chalk from 'chalk';
+import ora from 'ora';
+import { getGatewayUrl } from '@walrens/sdk';
+
+const program = new Command();
+program
+	.name('walrens')
+	.description('WalrENS CLI – link ENS names to Walrus blobs/sites')
+	.version('0.1.0');
+
+program
+	.command('link')
+	.description('Upload to Walrus and write ENS walrus Text record')
+	.argument('<ensName>', 'ENS name or subname')
+	.argument('<pathOrFile>', 'Path to file or directory')
+	.option('--network <chain>', 'Target chain for ENS write')
+	.option('--text-only', 'Write Text record only, skip contenthash', true)
+	.action(async (ensName, pathOrFile, options) => {
+		const spinner = ora(`Linking ${ensName} to Walrus…`).start();
+		try {
+			// TODO: implement upload + ENS write
+			await new Promise((r) => setTimeout(r, 500));
+			const url = getGatewayUrl(ensName);
+			spinner.succeed(`Linked ${chalk.cyan(ensName)} to Walrus.`);
+			console.log(`${chalk.gray('→')} Visit: ${chalk.green(url)}`);
+			process.exitCode = 0;
+		} catch (err) {
+			spinner.fail('Failed to link');
+			console.error(err instanceof Error ? err.message : String(err));
+			process.exitCode = 2;
+		}
+	});
+
+program
+	.command('demo')
+	.description('Publish example site and print demo URL')
+	.action(async () => {
+		console.log('Demo not yet implemented.');
+	});
+
+program.parseAsync().catch((err) => {
+	console.error(err);
+	process.exit(2);
+});
+</file>
+
+<file path="packages/cli/tsconfig.json">
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "src",
+    "outDir": "dist"
+  },
+  "include": ["src"]
+}
+</file>
+
+<file path="packages/sdk/package.json">
+{
+  "name": "@walrens/sdk",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsup src/index.ts --format esm --dts --sourcemap",
+    "dev": "tsup src/index.ts --format esm --dts --sourcemap --watch",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "zod": "^3.23.8",
+    "viem": "^2.16.3"
+  },
+  "devDependencies": {
+    "tsup": "^8.0.2",
+    "typescript": "^5.5.4",
+    "vitest": "^2.0.5"
+  }
+}
+</file>
+
+<file path="packages/sdk/README.md">
+# @walrens/sdk
+
+TypeScript SDK to resolve ENS → Walrus and publish mappings.
+
+Exports:
+- `resolveWalrusFromEns(name, {provider})`
+- `publishToEns(name, payload, opts)`
+- `getGatewayUrl(name, path?)`
+- `WalrusTextSchema`
+</file>
+
+<file path="packages/sdk/src/index.ts">
+export type WalrusMapping =
+	| { type: 'blob'; id: string }
+	| { type: 'site'; id: string; index?: string };
+
+export interface ResolveOptions {
+	provider?: any;
+}
+
+export interface PublishOptions {
+	network?: string;
+	textOnly?: boolean;
+}
+
+export function getGatewayUrl(name: string, path: string = '/'): string {
+	const safePath = path.startsWith('/') ? path : `/${path}`;
+	return `https://${name}.walrus.tools${safePath}`;
+}
+
+export async function resolveWalrusFromEns(name: string, _opts: ResolveOptions = {}): Promise<WalrusMapping | null> {
+	// TODO: implement ENS lookup via viem. Placeholder returns null.
+	return null;
+}
+
+export async function publishToEns(
+	name: string,
+	payload: Blob | Uint8Array | ArrayBuffer | string,
+	_opts: PublishOptions = {}
+): Promise<{ txHash: string }> {
+	// TODO: implement upload + ENS text record write.
+	return { txHash: '0x' };
+}
+
+export const WalrusTextSchema = {
+	key: 'walrus',
+	parse(value: string): WalrusMapping | null {
+		try {
+			if (value.startsWith('blob:')) return { type: 'blob', id: value.slice(5) };
+			const json = JSON.parse(value);
+			if (json && json.type === 'site' && typeof json.id === 'string') {
+				return { type: 'site', id: json.id, index: json.index };
+			}
+			return null;
+		} catch {
+			return null;
+		}
+	},
+	stringify(mapping: WalrusMapping): string {
+		if (mapping.type === 'blob') return `blob:${mapping.id}`;
+		return JSON.stringify(mapping);
+	}
+};
+</file>
+
+<file path="packages/sdk/tsconfig.json">
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "src",
+    "outDir": "dist"
+  },
+  "include": ["src"]
+}
+</file>
+
+<file path="pnpm-workspace.yaml">
+packages:
+  - 'packages/*'
+  - 'apps/*'
+  - 'docs'
+</file>
+
+<file path="tsconfig.base.json">
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "lib": ["ES2022", "DOM"],
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "resolveJsonModule": true,
+    "allowSyntheticDefaultImports": true,
+    "declaration": true,
+    "declarationMap": true,
+    "sourceMap": true,
+    "outDir": "dist",
+    "types": []
+  },
+  "exclude": ["node_modules", "dist"]
+}
+</file>
+
+<file path="README.md">
+# WalrENS (ENS ↔ Walrus Developer Tool)
+
+A tiny SDK + CLI + gateway that lets any ENS name (or subname) resolve to Walrus blobs/sites.
+
+## Quickstart
+
+- Install pnpm (Node 20+)
+- Install deps: `pnpm install`
+- Dev gateway: `pnpm dev:gateway`
+- Dev CLI: `pnpm dev:cli`
+- Build all: `pnpm build`
+- Tests: `pnpm test`
+
+See `/docs` for full product requirements, architecture, and demo steps.
+</file>
+
+</files>

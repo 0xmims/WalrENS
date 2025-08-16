@@ -5,6 +5,7 @@ node_compat = true
 
 [vars]
 WALRUS_BASE = "https://walrus.example/api"
+ETH_RPC_URL = "https://eth.llamarpc.com"
 
 [observability]
 enabled = true
