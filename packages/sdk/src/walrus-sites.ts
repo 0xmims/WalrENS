@@ -92,35 +92,41 @@ export async function uploadToWalrus(
   const { walrusPublisherUrl } = { ...DEFAULT_OPTIONS, ...options };
   
   try {
-    const formData = new FormData();
-    
-    // Convert content to blob
+    // Convert content to blob for upload
     let blob: Blob;
     if (typeof content === 'string') {
       blob = new Blob([content], { type: 'text/plain' });
+    } else if (content instanceof Buffer) {
+      blob = new Blob([content], { type: 'application/octet-stream' });
     } else {
-      blob = new Blob([new Uint8Array(content)], { type: 'application/octet-stream' });
+      // content is Uint8Array - create a new one to ensure correct type
+      const uint8Array = new Uint8Array(content);
+      blob = new Blob([uint8Array], { type: 'application/octet-stream' });
     }
     
-    formData.append('file', blob);
-    
-    const response = await fetch(`${walrusPublisherUrl}/v1/store`, {
-      method: 'POST',
-      body: formData
+    // Use the correct Walrus API endpoint - PUT /v1/blobs
+    const response = await fetch(`${walrusPublisherUrl}/v1/blobs?epochs=5`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/octet-stream',
+      },
+      body: blob
     });
     
     if (!response.ok) {
-      throw new Error(`Walrus upload failed: ${response.status} ${response.statusText}`);
+      const errorText = await response.text();
+      throw new Error(`Walrus upload failed: ${response.status} ${response.statusText} - ${errorText}`);
     }
     
     const result = await response.json();
     
+    // Handle Walrus response format
     if (result.alreadyCertified) {
       return result.alreadyCertified.blobId;
     } else if (result.newlyCreated) {
       return result.newlyCreated.blobObject.blobId;
     } else {
-      throw new Error('Unexpected Walrus response format');
+      throw new Error('Unexpected Walrus response format: ' + JSON.stringify(result));
     }
   } catch (error) {
     throw new Error(`Failed to upload to Walrus: ${error instanceof Error ? error.message : String(error)}`);
