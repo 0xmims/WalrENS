@@ -5,17 +5,17 @@
 
 WalrENS is a complete platform for creating, deploying, and managing decentralized websites using ENS names and Walrus Sites. Deploy React apps, static sites, blogs, and more with permanent, censorship-resistant hosting.
 
-## ✨ Features
+##  Features
 
-- **🎨 Template-Based Design**: Professional templates for personal, portfolio, blog, and business sites
-- **🔗 ENS Integration**: Your ENS name becomes your website URL (yourname.eth)
-- **💾 Walrus Storage**: Decentralized, censorship-resistant hosting on Walrus network
-- **🚀 One-Click Deploy**: Deploy complete websites with assets, routing, and SEO optimization
-- **📱 Multi-Device Preview**: Test your site across desktop, tablet, and mobile
-- **⚡ Gateway Serving**: Fast content delivery with SPA routing support
-- **🔧 CLI Tools**: Command-line deployment and management tools
+- ** Template-Based Design**: Professional templates for personal, portfolio, blog, and business sites
+- ** ENS Integration**: Your ENS name becomes your website URL (yourname.eth)
+- ** Walrus Storage**: Decentralized, censorship-resistant hosting on Walrus network
+- ** One-Click Deploy**: Deploy complete websites with assets, routing, and SEO optimization
+- ** Multi-Device Preview**: Test your site across desktop, tablet, and mobile
+- ** Gateway Serving**: Fast content delivery with SPA routing support
+- ** CLI Tools**: Command-line deployment and management tools
 
-## 🚀 Quick Start
+##  Quick Start
 
 ### Prerequisites
 
@@ -51,7 +51,7 @@ pnpm dev:gateway
 pnpm dev:cli
 ```
 
-## 📦 Project Structure
+##  Project Structure
 
 ```
 walrens/
@@ -64,7 +64,7 @@ walrens/
 └── docs/                # Documentation and guides
 ```
 
-## 🎯 Getting Started
+##  Getting Started
 
 ### 1. Using the Web Interface
 
@@ -103,7 +103,7 @@ SUI_RPC_URL=https://fullnode.testnet.sui.io:443
 ETH_RPC_URL=https://eth-sepolia.g.alchemy.com/v2/YOUR_KEY
 ```
 
-## 📚 API Reference
+##  API Reference
 
 ### SDK Usage
 
@@ -153,7 +153,7 @@ walrens status <ensName> [options]
 walrens link <ensName> <pathOrFile> [options]
 ```
 
-## 🌐 ENS Text Record Format
+##  ENS Text Record Format
 
 WalrENS supports both legacy and enhanced ENS text record formats:
 
@@ -176,7 +176,7 @@ WalrENS supports both legacy and enhanced ENS text record formats:
 }
 ```
 
-## 🏗️ Architecture
+## 🏗 Architecture
 
 WalrENS consists of several integrated components:
 
@@ -193,7 +193,7 @@ WalrENS consists of several integrated components:
 4. ENS text record is updated to point to the site
 5. Gateway resolves ENS names and serves content from Walrus
 
-## 🎨 Website Templates
+##  Website Templates
 
 WalrENS includes several professional templates:
 
@@ -227,7 +227,7 @@ WalrENS includes several professional templates:
 - Open an issue on GitHub for bugs
 - Join our community for support
 
-## 🛣️ Roadmap
+## 🛣 Roadmap
 
 - [ ] **v1.0**: Basic site deployment and ENS integration
 - [ ] **v1.1**: Advanced templates and customization
@@ -235,19 +235,18 @@ WalrENS includes several professional templates:
 - [ ] **v1.3**: Collaborative editing and version control
 - [ ] **v2.0**: Integrated analytics and SEO tools
 
-## 🤝 Contributing
+##  Contributing
 
 We welcome contributions! Please see our [contributing guide](./CONTRIBUTING.md) for details.
 
-## 📄 License
+##  License
 
 MIT License - see [LICENSE](./LICENSE) for details.
 
-## 🙏 Acknowledgments
+##  Acknowledgments
 
 - **ENS**: For decentralized naming infrastructure
 - **Walrus**: For decentralized storage and hosting
-- **Sui**: For blockchain infrastructure
 - **Ethereum**: For the decentralized web ecosystem
 
 ---
