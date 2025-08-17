@@ -1,17 +1,16 @@
 {
-  "name": "walrens-monorepo",
+  "name": "walrens-app",
   "private": true,
   "version": "0.1.0",
-  "packageManager": "pnpm@9.0.0",
   "engines": {
     "node": ">=20"
   },
   "scripts": {
-    "build": "pnpm -r build",
-    "test": "pnpm -r test",
-    "dev:cli": "pnpm --filter @walrens/cli dev",
-    "dev:gateway": "pnpm --filter @walrens/gateway dev",
-    "dev:site-builder": "pnpm --filter @walrens/site-builder dev",
-    "demo": "pnpm --filter @walrens/cli demo"
-  }
+    "build": "cd app && npm run build",
+    "start": "cd app && npm start",
+    "dev": "cd app && npm run dev",
+    "install": "cd app && npm install"
+  },
+  "dependencies": {},
+  "devDependencies": {}
 }

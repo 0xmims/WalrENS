@@ -1,0 +1,34 @@
+{
+  "buildCommand": "cd app && npm run build",
+  "outputDirectory": "app/.next",
+  "installCommand": "cd app && npm install",
+  "framework": null,
+  "functions": {
+    "app/pages/api/upload.js": {
+      "maxDuration": 30
+    },
+    "app/pages/api/deploy.js": {
+      "maxDuration": 30
+    },
+    "app/pages/api/publish.js": {
+      "maxDuration": 20
+    }
+  },
+  "rewrites": [
+    {
+      "source": "/:ens(.*\\.eth)/:path*",
+      "destination": "/api/proxy/:ens/:path*"
+    }
+  ],
+  "headers": [
+    {
+      "source": "/api/proxy/(.*)",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=3600, s-maxage=86400"
+        }
+      ]
+    }
+  ]
+}
