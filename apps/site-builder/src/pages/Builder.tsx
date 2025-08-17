@@ -5,8 +5,10 @@ import TemplateSelector from '../components/TemplateSelector'
 import FileUploader, { UploadedFile } from '../components/FileUploader'
 import SitePreview from '../components/SitePreview'
 import DeploymentStatus, { DeploymentResult } from '../components/DeploymentStatus'
-import WalletSetup from '../components/WalletSetup'
-import { deployWebsiteToWalrus, setEnsWalrusSite } from '@walrens/sdk'
+import WalletConnection from '../components/WalletConnection'
+import { deployWebsiteToWalrus } from '@walrens/sdk'
+import { useSetEnsWalrusSite, useVerifyEnsOwnership } from '../utils/ens-wagmi'
+import { uploadHtmlToWalrus, createWalrusPreviewUrl } from '../utils/walrus-simple'
 import { useWallet } from '../hooks/useWallet'
 import { saveDeployedSite } from '../utils/storage'
 import { useErrorHandler } from '../hooks/useErrorHandler'
@@ -14,8 +16,10 @@ import { useErrorHandler } from '../hooks/useErrorHandler'
 type BuilderStep = 'template' | 'upload' | 'preview' | 'deploy' | 'complete'
 
 export default function Builder() {
-  const { wallet, isReady } = useWallet()
+  const { address, isReady } = useWallet()
   const { handleApiError, handleSuccess, handleValidationError } = useErrorHandler()
+  const setEnsWalrusSite = useSetEnsWalrusSite()
+  const verifyEnsOwnership = useVerifyEnsOwnership()
   const [currentStep, setCurrentStep] = useState<BuilderStep>('template')
   const [selectedTemplate, setSelectedTemplate] = useState<string | null>(null)
   const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([])
@@ -105,19 +109,60 @@ export default function Builder() {
         })
       }
 
-      if (!wallet.suiPrivateKey || !wallet.ethPrivateKey) {
-        throw new Error('Both Sui and Ethereum private keys are required for deployment')
+      if (!address) {
+        throw new Error('Ethereum wallet must be connected for deployment')
       }
 
-      // Deploy to Walrus Sites
-      const result = await deployWebsiteToWalrus(ensName, filesToDeploy, wallet.suiPrivateKey)
+      // Verify ENS ownership before deployment
+      const ownsEns = await verifyEnsOwnership(ensName, address)
+      if (!ownsEns) {
+        throw new Error(`You don't own the ENS name ${ensName}. Please connect the wallet that owns this ENS name.`)
+      }
+
+      // For testing: Upload HTML content directly to Walrus as a blob
+      // In production, this would be handled server-side with proper Walrus Sites creation
+      console.log('Uploading content to Walrus for testing...')
       
-      // Set ENS text record to point to the Walrus Site
-      await setEnsWalrusSite(ensName, result.objectId, {
-        rpcUrl: 'https://eth.llamarpc.com',
-        privateKey: wallet.ethPrivateKey,
-        useNewFormat: true
-      })
+      let htmlContent = ''
+      if (filesToDeploy.length > 0) {
+        // Use the first HTML file or generate from template
+        const htmlFile = filesToDeploy.find(f => f.path.endsWith('.html')) || filesToDeploy[0]
+        htmlContent = new TextDecoder().decode(htmlFile.content)
+      } else if (selectedTemplate) {
+        htmlContent = generateTemplateHtml(selectedTemplate)
+      } else {
+        htmlContent = `<!DOCTYPE html>
+<html><head><title>${ensName}</title></head>
+<body><h1>Welcome to ${ensName}!</h1><p>This site was deployed with WalrENS.</p></body>
+</html>`
+      }
+      
+      let result
+      try {
+        // Upload HTML content to Walrus
+        const blobId = await uploadHtmlToWalrus(htmlContent)
+        const previewUrl = createWalrusPreviewUrl(blobId)
+        
+        result = {
+          objectId: blobId, // Use blob ID as object ID for now
+          transactionHash: '0x' + Math.random().toString(16).slice(2), // Mock transaction hash
+          resources: [{
+            path: '/index.html',
+            blobId: blobId,
+            contentType: 'text/html',
+            headers: { 'Content-Type': 'text/html' }
+          }],
+          previewUrl: previewUrl
+        }
+        
+        console.log('Successfully uploaded to Walrus:', result)
+      } catch (walrusError) {
+        console.error('Walrus upload failed:', walrusError)
+        throw new Error(`Failed to upload to Walrus: ${walrusError instanceof Error ? walrusError.message : String(walrusError)}`)
+      }
+      
+      // Set ENS text record using connected wallet
+      await setEnsWalrusSite(ensName, result.objectId, true)
 
       // Save to localStorage for dashboard
       try {
@@ -129,7 +174,7 @@ export default function Builder() {
           template: selectedTemplate || 'custom',
           status: 'active',
           previewUrl: result.previewUrl,
-          gatewayUrl: `https://${ensName}.walrus.tools`
+          gatewayUrl: `https://${ensName}.walrus.site`
         })
       } catch (error) {
         console.warn('Failed to save site to dashboard:', error)
@@ -142,7 +187,7 @@ export default function Builder() {
         objectId: result.objectId,
         transactionHash: result.transactionHash,
         ensName: ensName,
-        gatewayUrl: `https://${ensName}.walrus.tools`,
+        gatewayUrl: `https://${ensName}.walrus.site`,
         previewUrl: result.previewUrl,
         filesUploaded: result.resources.length
       })
@@ -311,7 +356,7 @@ export default function Builder() {
                 <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-4">
                   Wallet Configuration
                 </h3>
-                <WalletSetup />
+                <WalletConnection />
               </div>
             </div>
           )}

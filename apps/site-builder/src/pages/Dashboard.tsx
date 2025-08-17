@@ -186,7 +186,7 @@ export default function Dashboard() {
                     </div>
                     
                     <a
-                      href={`https://${site.ensName}.walrus.tools`}
+                      href={`https://${site.ensName}.walrus.site`}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 text-sm font-medium flex items-center"

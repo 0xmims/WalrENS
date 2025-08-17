@@ -96,7 +96,8 @@ export async function uploadToWalrus(
     let blob: Blob;
     if (typeof content === 'string') {
       blob = new Blob([content], { type: 'text/plain' });
-    } else if (content instanceof Buffer) {
+    } else if (typeof Buffer !== 'undefined' && content instanceof Buffer) {
+      // Only check Buffer if it exists (Node.js environment)
       blob = new Blob([content], { type: 'application/octet-stream' });
     } else {
       // content is Uint8Array - create a new one to ensure correct type
@@ -200,7 +201,13 @@ export async function createWalrusSite(
   try {
     // Initialize Sui client and keypair
     const client = new SuiClient({ url: suiRpcUrl });
-    const keypair = Ed25519Keypair.fromSecretKey(Uint8Array.from(Buffer.from(suiPrivateKey.replace('0x', ''), 'hex')));
+    // Convert hex private key to Uint8Array (browser-compatible)
+    const hexKey = suiPrivateKey.replace('0x', '');
+    const keyBytes = new Uint8Array(hexKey.length / 2);
+    for (let i = 0; i < hexKey.length; i += 2) {
+      keyBytes[i / 2] = parseInt(hexKey.substr(i, 2), 16);
+    }
+    const keypair = Ed25519Keypair.fromSecretKey(keyBytes);
     const sender = keypair.getPublicKey().toSuiAddress();
     
     // Create transaction to create Walrus Site object

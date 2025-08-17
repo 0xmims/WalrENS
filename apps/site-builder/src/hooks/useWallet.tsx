@@ -1,15 +1,12 @@
-import { createContext, useContext, useState, useCallback, ReactNode } from 'react'
-
-interface WalletState {
-  suiPrivateKey?: string
-  ethPrivateKey?: string
-  isConnected: boolean
-}
+import { createContext, useContext, ReactNode } from 'react'
+import { useAccount, useConnect, useDisconnect } from 'wagmi'
 
 interface WalletContextType {
-  wallet: WalletState
-  setSuiPrivateKey: (key: string) => void
-  setEthPrivateKey: (key: string) => void
+  address?: string
+  isConnected: boolean
+  isConnecting: boolean
+  connector?: any
+  connect: (connector: any) => void
   disconnect: () => void
   isReady: boolean
 }
@@ -21,40 +18,24 @@ interface WalletProviderProps {
 }
 
 export function WalletProvider({ children }: WalletProviderProps) {
-  const [wallet, setWallet] = useState<WalletState>({
-    isConnected: false
-  })
+  const { address, isConnected, connector } = useAccount()
+  const { connect, connectors, isPending } = useConnect()
+  const { disconnect } = useDisconnect()
 
-  const setSuiPrivateKey = useCallback((key: string) => {
-    setWallet(prev => ({
-      ...prev,
-      suiPrivateKey: key,
-      isConnected: Boolean(key && prev.ethPrivateKey)
-    }))
-  }, [])
+  const handleConnect = (selectedConnector: any) => {
+    connect({ connector: selectedConnector })
+  }
 
-  const setEthPrivateKey = useCallback((key: string) => {
-    setWallet(prev => ({
-      ...prev,
-      ethPrivateKey: key,
-      isConnected: Boolean(key && prev.suiPrivateKey)
-    }))
-  }, [])
-
-  const disconnect = useCallback(() => {
-    setWallet({
-      isConnected: false
-    })
-  }, [])
-
-  const isReady = Boolean(wallet.suiPrivateKey && wallet.ethPrivateKey)
+  const isReady = Boolean(address && isConnected)
 
   return (
     <WalletContext.Provider
       value={{
-        wallet,
-        setSuiPrivateKey,
-        setEthPrivateKey,
+        address,
+        isConnected,
+        isConnecting: isPending,
+        connector,
+        connect: handleConnect,
         disconnect,
         isReady
       }}

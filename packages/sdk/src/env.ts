@@ -23,7 +23,7 @@ export const DEFAULT_CONFIG: Required<Omit<EnvConfig, 'suiPrivateKey' | 'ethPriv
   ethRpcUrl: 'https://eth.llamarpc.com',
   walrusPublisherUrl: 'https://publisher.walrus-testnet.walrus.space',
   walrusAggregatorUrl: 'https://aggregator.walrus-testnet.walrus.space',
-  gatewayDomain: 'walrus.tools'
+  gatewayDomain: 'walrus.site'
 };
 
 /**

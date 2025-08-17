@@ -27,7 +27,7 @@ export default function Preview() {
 
       if (ensName) {
         // Load via ENS name resolution
-        const response = await fetch(`https://${ensName}.walrus.tools`)
+        const response = await fetch(`https://${ensName}.walrus.site`)
         if (response.ok) {
           const html = await response.text()
           setPreviewHtml(html)
@@ -139,7 +139,7 @@ export default function Preview() {
               
               {ensName && (
                 <a
-                  href={`https://${ensName}.walrus.tools`}
+                  href={`https://${ensName}.walrus.site`}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="flex items-center text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 text-sm font-medium"
