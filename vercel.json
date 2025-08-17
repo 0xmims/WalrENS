@@ -1,4 +1,7 @@
 {
+  "framework": "nextjs",
+  "buildCommand": "next build ./app",
+  "outputDirectory": "./app/.next",
   "functions": {
     "app/pages/api/upload.js": {
       "maxDuration": 30
