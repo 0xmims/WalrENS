@@ -1,3 +1,4 @@
+![WalrENS Cover](./WalrENSCoverLogo.png)
 # WalrENS 🌐
 
 **Transform your ENS name into a decentralized website**
