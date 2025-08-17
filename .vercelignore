@@ -3,3 +3,7 @@ packages/
 pnpm-workspace.yaml
 pnpm-lock.yaml
 **/.env.local
+vitest.config.ts
+vitest.setup.ts
+**/vite.config.ts
+**/vite.config.js
