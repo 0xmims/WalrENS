@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "wrangler dev --local --persist | cat",
-    "build": "wrangler deploy --dry-run | cat",
+    "build": "wrangler deploy --dry-run",
     "deploy": "wrangler deploy"
   },
   "dependencies": {

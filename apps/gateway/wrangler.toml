@@ -4,7 +4,7 @@ compatibility_date = "2024-08-15"
 node_compat = true
 
 [vars]
-WALRUS_BASE = "https://walrus.example/api"
+WALRUS_BASE = "https://aggregator.walrus-testnet.walrus.space"
 ETH_RPC_URL = "https://eth.llamarpc.com"
 
 [observability]

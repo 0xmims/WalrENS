@@ -6,6 +6,30 @@ import { mainnet } from 'viem/chains';
 export interface Env {
 	WALRUS_BASE: string;
 	ETH_RPC_URL?: string;
+	SUI_RPC_URL?: string;
+}
+
+// MIME type mapping for common file extensions
+const MIME_TYPES: Record<string, string> = {
+	'.html': 'text/html',
+	'.css': 'text/css',
+	'.js': 'application/javascript',
+	'.json': 'application/json',
+	'.png': 'image/png',
+	'.jpg': 'image/jpeg',
+	'.jpeg': 'image/jpeg',
+	'.gif': 'image/gif',
+	'.svg': 'image/svg+xml',
+	'.ico': 'image/x-icon',
+	'.woff': 'font/woff',
+	'.woff2': 'font/woff2',
+	'.ttf': 'font/ttf',
+	'.pdf': 'application/pdf'
+};
+
+function getMimeType(path: string): string {
+	const ext = path.substring(path.lastIndexOf('.'));
+	return MIME_TYPES[ext] || 'application/octet-stream';
 }
 
 // Create viem client for ENS resolution
@@ -17,8 +41,8 @@ function createViemClient(env: Env) {
 	});
 }
 
-// Parse walrus mapping from ENS text record
-function parseWalrusMapping(text: string): { type: 'blob' | 'site'; id: string; index?: string } | null {
+// Parse walrus mapping from ENS text record with enhanced format support
+function parseWalrusMapping(text: string): { type: 'blob' | 'site'; id: string; index?: string; network?: string } | null {
 	try {
 		// Check if it's a blob mapping
 		if (text.startsWith('blob:')) {
@@ -27,8 +51,24 @@ function parseWalrusMapping(text: string): { type: 'blob' | 'site'; id: string; 
 		
 		// Check if it's a site mapping
 		const parsed = JSON.parse(text);
+		
+		// Enhanced format with objectId
+		if (parsed.type === 'site' && parsed.objectId) {
+			return { 
+				type: 'site', 
+				id: parsed.objectId,
+				index: parsed.index || 'index.html',
+				network: parsed.network
+			};
+		}
+		
+		// Legacy format with id
 		if (parsed.type === 'site' && parsed.id) {
-			return { type: 'site', id: parsed.id, index: parsed.index };
+			return { 
+				type: 'site', 
+				id: parsed.id, 
+				index: parsed.index || 'index.html'
+			};
 		}
 		
 		return null;
@@ -37,17 +77,21 @@ function parseWalrusMapping(text: string): { type: 'blob' | 'site'; id: string; 
 	}
 }
 
-// Build Walrus URL from mapping and path
+// Build Walrus URL from mapping and path with enhanced site support
 function buildWalrusUrl(mapping: { type: 'blob' | 'site'; id: string; index?: string }, path: string, env: Env): string {
 	if (mapping.type === 'blob') {
-		return `${env.WALRUS_BASE}/blobs/${mapping.id}${path}`;
+		return `${env.WALRUS_BASE}/blobs/${mapping.id}`;
 	} else {
-		// For site type, use the index if specified, otherwise default to index.html
-		const indexPath = mapping.index || 'index.html';
+		// For Walrus Sites, handle routing properly
 		if (path === '/' || path === '') {
+			// Default to index file
+			const indexPath = mapping.index || 'index.html';
 			return `${env.WALRUS_BASE}/sites/${mapping.id}/${indexPath}`;
 		}
-		return `${env.WALRUS_BASE}/sites/${mapping.id}${path}`;
+		
+		// Remove leading slash for site resources
+		const cleanPath = path.startsWith('/') ? path.substring(1) : path;
+		return `${env.WALRUS_BASE}/sites/${mapping.id}/${cleanPath}`;
 	}
 }
 
@@ -57,28 +101,35 @@ router.get('/:ensName/*', async (request, env: Env) => {
 	const { params, url } = request as any;
 	const ensName = params.ensName;
 	let path = new URL(url).pathname.replace(`/${ensName}`, '') || '/';
-	
-	// Default to index.html for directory requests
-	if (path === '/' || path === '') {
-		path = '/index.html';
-	}
 
 	try {
 		// Resolve ENS name and get text record
 		const client = createViemClient(env);
 		let walrusText: string | null = null;
 		
+		// Try new walrus-site text record first
 		try {
-			// Try getEnsText first (viem v2)
 			walrusText = await getEnsText(client, {
 				name: ensName,
-				key: 'walrus',
+				key: 'walrus-site',
 			});
 		} catch {
-			// Fallback to resolver.text if getEnsText is unavailable
-			const resolver = await getEnsResolver(client, { name: ensName });
-			if (resolver) {
-				walrusText = await resolver.getText('walrus');
+			// Fallback to legacy walrus text record
+			try {
+				walrusText = await getEnsText(client, {
+					name: ensName,
+					key: 'walrus',
+				});
+			} catch {
+				// Final fallback to resolver.text
+				const resolver = await getEnsResolver(client, { name: ensName });
+				if (resolver) {
+					try {
+						walrusText = await resolver.getText('walrus-site');
+					} catch {
+						walrusText = await resolver.getText('walrus');
+					}
+				}
 			}
 		}
 
@@ -110,23 +161,49 @@ router.get('/:ensName/*', async (request, env: Env) => {
 			});
 
 			if (!upstream.ok) {
-				return new Response(`Upstream error: ${upstream.status}`, { 
-					status: upstream.status 
+				// For SPAs, try to serve index.html on 404
+				if (upstream.status === 404 && mapping.type === 'site' && !path.includes('.')) {
+					const indexUrl = buildWalrusUrl(mapping, '/', env);
+					const indexResponse = await fetch(indexUrl);
+					
+					if (indexResponse.ok) {
+						response = new Response(indexResponse.body, {
+							status: 200,
+							headers: {
+								'Content-Type': 'text/html',
+								'Cache-Control': 'public, max-age=300',
+								'x-cache': 'SPA-FALLBACK',
+							}
+						});
+					} else {
+						return new Response(`Upstream error: ${upstream.status}`, { 
+							status: upstream.status 
+						});
+					}
+				} else {
+					return new Response(`Upstream error: ${upstream.status}`, { 
+						status: upstream.status 
+					});
+				}
+			} else {
+				// Determine content type
+				const contentType = upstream.headers.get('Content-Type') || getMimeType(path);
+				
+				// Create response with proper headers
+				response = new Response(upstream.body, {
+					status: upstream.status,
+					headers: {
+						'Content-Type': contentType,
+						'Cache-Control': mapping.type === 'site' ? 'public, max-age=3600' : 'public, max-age=600',
+						'x-cache': cacheStatus,
+					}
 				});
 			}
 
-			// Create response with proper headers
-			response = new Response(upstream.body, {
-				status: upstream.status,
-				headers: {
-					'Content-Type': upstream.headers.get('Content-Type') || 'application/octet-stream',
-					'Cache-Control': 'public, max-age=600',
-					'x-cache': cacheStatus,
-				}
-			});
-
 			// Cache the response
-			ctxWaitUntil(cache.put(cacheKey, response.clone()));
+			if (response) {
+				ctxWaitUntil(cache.put(cacheKey, response.clone()));
+			}
 		}
 
 		// Add cache status header to response

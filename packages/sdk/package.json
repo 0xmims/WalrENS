@@ -17,7 +17,9 @@
   },
   "dependencies": {
     "zod": "^3.23.8",
-    "viem": "^2.16.3"
+    "viem": "^2.16.3",
+    "@mysten/sui.js": "^0.54.1",
+    "jszip": "^3.10.1"
   },
   "devDependencies": {
     "tsup": "^8.0.2",

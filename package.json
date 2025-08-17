@@ -11,6 +11,7 @@
     "test": "pnpm -r test",
     "dev:cli": "pnpm --filter @walrens/cli dev",
     "dev:gateway": "pnpm --filter @walrens/gateway dev",
+    "dev:site-builder": "pnpm --filter @walrens/site-builder dev",
     "demo": "pnpm --filter @walrens/cli demo"
   }
 }

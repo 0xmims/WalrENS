@@ -2,6 +2,7 @@ import { createPublicClient, http, createWalletClient as createViemWalletClient,
 import { getEnsText, getEnsResolver } from 'viem/ens';
 import { mainnet } from 'viem/chains';
 import { privateKeyToAccount } from 'viem/accounts';
+import { encodeFunctionData } from 'viem';
 import type { WalrusMapping } from './index.js';
 
 // Create viem client for ENS operations
@@ -70,9 +71,81 @@ export async function setEnsTextRecord(opts: {
 	value: string;
 	rpcUrl: string;
 	privateKey: `0x${string}`;
+	key?: string;
 }): Promise<`0x${string}`> {
-	// TODO: Implement setEnsTextRecord when proper viem API is available
-	throw new Error('setEnsTextRecord not yet implemented - requires proper viem resolver API');
+	try {
+		const client = createViemClient(opts.rpcUrl);
+		const walletClient = createWalletClient(opts.rpcUrl, opts.privateKey);
+		
+		// Get the resolver address for this ENS name
+		const resolver = await getEnsResolver(client, { name: opts.name });
+		if (!resolver) {
+			throw new Error(`No resolver found for ENS name: ${opts.name}`);
+		}
+
+		// ENS Text Resolver ABI for setText function
+		const textResolverAbi = [
+			{
+				name: 'setText',
+				type: 'function',
+				stateMutability: 'nonpayable',
+				inputs: [
+					{ name: 'node', type: 'bytes32' },
+					{ name: 'key', type: 'string' },
+					{ name: 'value', type: 'string' }
+				],
+				outputs: []
+			}
+		] as const;
+
+		// Calculate ENS node hash (namehash)
+		const node = await getNodeHash(opts.name);
+		
+		// Encode the setText function call
+		const data = encodeFunctionData({
+			abi: textResolverAbi,
+			functionName: 'setText',
+			args: [node, opts.key || 'walrus', opts.value]
+		});
+
+		// Send transaction to resolver
+		const hash = await walletClient.sendTransaction({
+			to: resolver,
+			data,
+			gas: 100000n, // Reasonable gas limit for setText
+		});
+
+		return hash;
+	} catch (error) {
+		console.error('Error setting ENS text record:', error);
+		throw error;
+	}
+}
+
+/**
+ * Calculate ENS namehash for a given name
+ * @param name ENS name (e.g., 'example.eth')
+ * @returns Namehash as bytes32
+ */
+async function getNodeHash(name: string): Promise<`0x${string}`> {
+	// Import keccak256 and toBytes for namehash calculation
+	const { keccak256, toBytes } = await import('viem');
+	
+	function namehash(name: string): `0x${string}` {
+		if (!name) return '0x0000000000000000000000000000000000000000000000000000000000000000';
+		
+		const labels = name.toLowerCase().split('.');
+		let node = '0x0000000000000000000000000000000000000000000000000000000000000000' as `0x${string}`;
+		
+		for (let i = labels.length - 1; i >= 0; i--) {
+			const labelHash = keccak256(toBytes(labels[i]));
+			node = keccak256(toBytes(node + labelHash.slice(2)));
+		}
+		
+		return node;
+	}
+	
+	return namehash(name);
 }
 
 /**
@@ -123,7 +196,14 @@ export async function resolveWalrusFromEns(
 	rpcUrl: string
 ): Promise<WalrusMapping | null> {
 	try {
-		const textRecord = await getEnsTextRecord(name, 'walrus', rpcUrl);
+		// Try the new walrus-site text record first
+		let textRecord = await getEnsTextRecord(name, 'walrus-site', rpcUrl);
+		
+		// Fall back to legacy walrus text record
+		if (!textRecord) {
+			textRecord = await getEnsTextRecord(name, 'walrus', rpcUrl);
+		}
+		
 		if (!textRecord) {
 			return null;
 		}
@@ -133,4 +213,46 @@ export async function resolveWalrusFromEns(
 		console.error('Error resolving Walrus from ENS:', error);
 		return null;
 	}
+}
+
+/**
+ * Set ENS text record for Walrus Site with enhanced format support
+ * @param opts Options object containing ENS name, mapping, RPC URL, and private key
+ * @returns Transaction hash
+ */
+export async function setEnsWalrusSiteRecord(opts: {
+	name: string;
+	mapping: WalrusMapping;
+	rpcUrl: string;
+	privateKey: `0x${string}`;
+	useNewFormat?: boolean; // Use walrus-site instead of walrus text record
+}): Promise<`0x${string}`> {
+	const textKey = opts.useNewFormat ? 'walrus-site' : 'walrus';
+	const textValue = stringifyWalrusMapping(opts.mapping);
+	
+	// Use the enhanced format for walrus-site records
+	if (opts.useNewFormat && opts.mapping.type === 'site') {
+		const enhancedValue = JSON.stringify({
+			type: 'site',
+			objectId: opts.mapping.id,
+			network: 'sui-testnet', // or sui-mainnet
+			index: opts.mapping.index || 'index.html'
+		});
+		
+		return await setEnsTextRecord({
+			name: opts.name,
+			value: enhancedValue,
+			rpcUrl: opts.rpcUrl,
+			privateKey: opts.privateKey,
+			key: textKey
+		});
+	}
+	
+	return await setEnsTextRecord({
+		name: opts.name,
+		value: textValue,
+		rpcUrl: opts.rpcUrl,
+		privateKey: opts.privateKey,
+		key: textKey
+	});
 }

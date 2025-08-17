@@ -6,6 +6,11 @@ export type WalrusMapping =
 	| { type: 'blob'; id: string }
 	| { type: 'site'; id: string; index?: string };
 
+// Re-export Walrus Sites functionality
+export * from './walrus-sites.js';
+export * from './ens.js';
+export * from './env.js';
+
 export interface ResolveOptions {
 	provider?: any;
     network?: 'mainnet' | 'sepolia';
@@ -65,6 +70,72 @@ export async function publishToEns(
 	// The next prompt will replace this with the real, working code.
 	console.log('publishToEns is not yet fully implemented.');
 	throw new Error('publishToEns is not yet fully implemented.');
+}
+
+/**
+ * Resolve Walrus Site from ENS name with enhanced support
+ */
+export async function resolveWalrusSite(ensName: string, opts: ResolveOptions = {}): Promise<WalrusMapping | null> {
+	try {
+		const mapping = await resolveWalrusFromEns(ensName, opts);
+		return mapping;
+	} catch (error) {
+		console.error('Error resolving Walrus site:', error);
+		return null;
+	}
+}
+
+/**
+ * Set ENS text record to point to a Walrus Site
+ */
+export async function setEnsWalrusSite(
+	ensName: string, 
+	objectId: string, 
+	options: { 
+		chain?: string; 
+		privateKey?: string; 
+		rpcUrl?: string;
+		index?: string;
+		useNewFormat?: boolean;
+	} = {}
+): Promise<string> {
+	const mapping: WalrusMapping = {
+		type: 'site',
+		id: objectId,
+		index: options.index || 'index.html'
+	};
+	
+	if (!options.privateKey || !options.rpcUrl) {
+		throw new Error('Private key and RPC URL are required for ENS operations');
+	}
+	
+	// Use the enhanced ENS function with new format support
+	const { setEnsWalrusSiteRecord } = await import('./ens.js');
+	
+	return await setEnsWalrusSiteRecord({
+		name: ensName,
+		mapping,
+		rpcUrl: options.rpcUrl,
+		privateKey: options.privateKey as `0x${string}`,
+		useNewFormat: options.useNewFormat ?? true
+	});
+}
+
+/**
+ * Get Walrus Site content by path
+ */
+export async function getWalrusSiteContent(
+	objectId: string, 
+	path: string,
+	options: { suiRpcUrl?: string; walrusAggregatorUrl?: string } = {}
+): Promise<Response> {
+	try {
+		// This would integrate with the Walrus Sites serving system
+		// For now, return a placeholder response
+		throw new Error('getWalrusSiteContent not yet implemented - requires Walrus Sites serving API');
+	} catch (error) {
+		throw new Error(`Failed to get site content: ${error instanceof Error ? error.message : String(error)}`);
+	}
 }
 
 export const WalrusTextSchema = {
